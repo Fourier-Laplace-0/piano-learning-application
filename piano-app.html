@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Piano Practice Dashboard - Flow State Edition</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; background-color: #1e1e2e; color: #cdd6f4; margin: 0; }
+        h1 { color: #89b4fa; text-align: center; margin-bottom: 10px; }
+        
+        .dashboard { display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 10px; }
+
+        #status { padding: 10px 20px; border-radius: 8px; background: #313244; border-left: 5px solid #f38ba8; width: 100%; max-width: 900px; text-align: center; font-weight: bold; transition: all 0.2s; }
+        .connected { border-left-color: #a6e3a1 !important; }
+        .success-flash { background: #a6e3a1 !important; color: #1e1e2e !important; }
+        .timeout-flash { background: #f9e2af !important; color: #1e1e2e !important; border-left-color: #f9e2af !important; }
+
+        .controls { display: flex; gap: 10px; background: #181825; padding: 15px 25px; border-radius: 8px; border: 1px solid #313244; flex-wrap: wrap; justify-content: center; max-width: 900px; width: 100%; box-sizing: border-box;}
+        select, button { padding: 8px 12px; background: #313244; color: #cdd6f4; border: 1px solid #45475a; border-radius: 4px; font-size: 1em; cursor: pointer; transition: 0.2s; }
+        select:focus, button:hover { outline: none; border-color: #89b4fa; background: #45475a; }
+        
+        #btn-surprise { background: #313244; border-color: #89b4fa; min-width: 220px; }
+        #btn-surprise.active { background: #f9e2af; color: #1e1e2e; border-color: #f9e2af; font-weight: bold; }
+        .btn-action { background: #a6e3a1; color: #1e1e2e; font-weight: bold; border: none; }
+        .btn-action:hover { background: #89dceb; }
+        
+        .stats-panel { display: flex; gap: 20px; background: #11111b; padding: 10px 25px; border-radius: 8px; font-family: monospace; font-size: 1.2em; color: #a6e3a1; border: 1px solid #313244; }
+
+        #tutorial-box { background: #f4f4f5; color: #1e1e2e; padding: 20px 30px; border-radius: 8px; max-width: 900px; width: 100%; box-sizing: border-box; text-align: center; border-top: 5px solid #89b4fa; }
+        #scale-name { margin-top: 0; margin-bottom: 10px; font-size: 1.8em; }
+        .note-info { font-size: 1.2em; color: #313244; margin-bottom: 5px; font-weight: bold; }
+
+        /* Hands Display */
+        .hands-container { display: flex; justify-content: center; gap: 40px; margin-top: 15px; }
+        .hand { display: flex; align-items: flex-end; gap: 5px; height: 80px; padding: 10px; background: #e2e2e3; border-radius: 10px 10px 40px 40px; border: 2px solid #cdd6f4; }
+        .finger { width: 25px; background: #313244; color: white; text-align: center; border-radius: 20px 20px 5px 5px; font-size: 0.9em; padding-top: 5px; transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+        .finger.active { background: #89b4fa; transform: translateY(-10px); box-shadow: 0 10px 15px rgba(137, 180, 250, 0.4); }
+        .thumb { height: 40px; } .index, .ring { height: 60px; } .middle { height: 75px; } .pinky { height: 45px; }
+
+        /* Piano Styles */
+        #piano-container { width: 100%; overflow-x: auto; padding: 10px 0; display: flex; justify-content: center; }
+        #piano { position: relative; background: #11111b; border-radius: 4px; height: 160px; }
+        .key { position: absolute; top: 0; box-sizing: border-box; border: 1px solid #1e1e2e; border-radius: 0 0 4px 4px; transition: background 0.1s ease; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 5px; font-size: 0.8em; font-weight: bold; }
+        .white { width: 40px; height: 160px; background: #ffffff; z-index: 1; color: #1e1e2e; box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2); }
+        .black { width: 24px; height: 100px; background: #181825; z-index: 2; color: transparent; box-shadow: inset 0 -4px 4px rgba(255,255,255,0.2); }
+        
+        .white.current-target, .black.current-target { background: #a6e3a1 !important; box-shadow: 0 0 15px #a6e3a1; z-index: 3; }
+        .white.next-target, .black.next-target { background: #f9e2af !important; }
+        
+        .white.active { background: #cdd6f4 !important; box-shadow: inset 0 2px 10px rgba(0,0,0,0.3); }
+        .black.active { background: #585b70 !important; }
+        
+        .white.error, .black.error { background: #f38ba8 !important; box-shadow: 0 0 15px #f38ba8; z-index: 4; }
+    </style>
+</head>
+<body>
+    <h1>🎹 Piano Practice Dashboard</h1>
+    
+    <div class="dashboard">
+        <div id="status">Waiting for keyboard...</div>
+
+        <div class="controls">
+            <button id="btn-surprise" onclick="cycleSurpriseMode()">🎲 Surprise: OFF</button>
+            <select id="root-note">
+                <option value="0">C</option><option value="1">C# / Db</option><option value="2">D</option>
+                <option value="3">D# / Eb</option><option value="4">E</option><option value="5">F</option>
+                <option value="6">F# / Gb</option><option value="7">G</option><option value="8">G# / Ab</option>
+                <option value="9">A</option><option value="10">A# / Bb</option><option value="11">B</option>
+            </select>
+            <select id="scale-type">
+                <option value="major">Major</option><option value="minor">Minor</option>
+            </select>
+            <select id="octave-start">
+                <option value="48">Start: C3</option><option value="60" selected>Start: C4</option><option value="72">Start: C5</option>
+            </select>
+            <button onclick="generateSequence()">Reset</button>
+            <button class="btn-action" onclick="playDemonstration()">🔊 Play Demo</button>
+        </div>
+
+        <div class="stats-panel">
+            <div id="timer-display">Time: 0.0s</div>
+            <div id="accuracy-display">Acc: 100%</div>
+        </div>
+
+        <div id="tutorial-box">
+            <h2 id="scale-name">C Major</h2>
+            <div class="note-info" id="scale-notes">Notes: C, D, E, F, G, A, B, C</div>
+            <div class="note-info" id="scale-fingering-lh">Fingering (LH): 5, 4, 3, 2, 1, 3, 2, 1</div>
+            <div class="note-info" id="scale-fingering-rh">Fingering (RH): 1, 2, 3, 1, 2, 3, 4, 5</div>
+            
+            <div class="hands-container">
+                <div class="hand" id="left-hand">
+                    <div class="finger pinky" id="lh-5">5</div>
+                    <div class="finger ring" id="lh-4">4</div>
+                    <div class="finger middle" id="lh-3">3</div>
+                    <div class="finger index" id="lh-2">2</div>
+                    <div class="finger thumb" id="lh-1">1</div>
+                </div>
+                <div class="hand" id="right-hand">
+                    <div class="finger thumb" id="rh-1">1</div>
+                    <div class="finger index" id="rh-2">2</div>
+                    <div class="finger middle" id="rh-3">3</div>
+                    <div class="finger ring" id="rh-4">4</div>
+                    <div class="finger pinky" id="rh-5">5</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="piano-container">
+            <div id="piano"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- MUSIC THEORY & CONFIG ---
+        const sharpNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        const flatNames  = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+        const flatKeys = [1, 3, 5, 6, 8, 10]; 
+        const scaleIntervals = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10] };
+
+        // Full Fingering Database
+        const fingeringDb = {
+            major: {
+                0:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                1:  { rh: "2, 3, 1, 2, 3, 4, 1, 2", lh: "3, 2, 1, 4, 3, 2, 1, 3" },
+                2:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                3:  { rh: "3, 1, 2, 3, 4, 1, 2, 3", lh: "3, 2, 1, 4, 3, 2, 1, 3" },
+                4:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                5:  { rh: "1, 2, 3, 4, 1, 2, 3, 4", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                6:  { rh: "2, 3, 4, 1, 2, 3, 1, 2", lh: "4, 3, 2, 1, 3, 2, 1, 4" },
+                7:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                8:  { rh: "3, 4, 1, 2, 3, 1, 2, 3", lh: "3, 2, 1, 4, 3, 2, 1, 3" },
+                9:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                10: { rh: "4, 1, 2, 3, 1, 2, 3, 4", lh: "3, 2, 1, 4, 3, 2, 1, 3" },
+                11: { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "4, 3, 2, 1, 4, 3, 2, 1" } 
+            },
+            minor: {
+                0:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                1:  { rh: "3, 4, 1, 2, 3, 1, 2, 3", lh: "3, 2, 1, 4, 3, 2, 1, 3" },
+                2:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                3:  { rh: "3, 1, 2, 3, 4, 1, 2, 3", lh: "2, 1, 4, 3, 2, 1, 3, 2" },
+                4:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                5:  { rh: "1, 2, 3, 4, 1, 2, 3, 4", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                6:  { rh: "3, 4, 1, 2, 3, 1, 2, 3", lh: "4, 3, 2, 1, 3, 2, 1, 4" },
+                7:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                8:  { rh: "3, 4, 1, 2, 3, 1, 2, 3", lh: "3, 2, 1, 4, 3, 2, 1, 3" },
+                9:  { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "5, 4, 3, 2, 1, 3, 2, 1" },
+                10: { rh: "2, 1, 2, 3, 1, 2, 3, 4", lh: "2, 1, 3, 2, 1, 4, 3, 2" },
+                11: { rh: "1, 2, 3, 1, 2, 3, 4, 5", lh: "4, 3, 2, 1, 4, 3, 2, 1" } 
+            }
+        };
+
+        let currentScaleSequence = [];
+        let currentVisualFingeringRH = [];
+        let currentVisualFingeringLH = [];
+        let currentStep = 0;
+        let startTime = 0;
+        let timerInterval = null;
+        let inactivityTimeout = null; 
+        let totalPresses = 0;
+        let correctPresses = 0;
+        let audioCtx = null;
+        let surpriseMode = 'off'; // States: 'off', 'mix', 'major', 'minor'
+        let isFinished = false;
+
+        // --- BUILD PIANO ---
+        const piano = document.getElementById('piano');
+        const startNote = 36; // C2
+        const endNote = 96;   // C7
+        let whiteKeyCount = 0;
+
+        for (let i = startNote; i <= endNote; i++) {
+            const noteIndex = i % 12;
+            const isBlack = [1, 3, 6, 8, 10].includes(noteIndex);
+            
+            const key = document.createElement('div');
+            key.id = `key-${i}`;
+            key.className = isBlack ? 'key black' : 'key white';
+            
+            if (!isBlack) {
+                key.innerText = sharpNames[noteIndex]; 
+                key.style.left = `${whiteKeyCount * 40}px`;
+                whiteKeyCount++;
+            } else {
+                key.style.left = `${(whiteKeyCount * 40) - 12}px`;
+            }
+            piano.appendChild(key);
+        }
+        piano.style.width = `${whiteKeyCount * 40}px`;
+
+        // --- TIMEOUT MANAGER ---
+        function resetInactivityTimer() {
+            clearTimeout(inactivityTimeout);
+            if (isFinished) return; 
+            
+            inactivityTimeout = setTimeout(() => {
+                const statusDiv = document.getElementById('status');
+                statusDiv.innerText = "⏳ Too slow! Restarting...";
+                statusDiv.classList.add('timeout-flash');
+                
+                setTimeout(() => {
+                    statusDiv.classList.remove('timeout-flash');
+                    if (surpriseMode !== 'off') randomizePractice();
+                    else generateSequence();
+                }, 500); 
+            }, 4000); 
+        }
+
+        // --- SURPRISE MODE LOGIC ---
+        function cycleSurpriseMode() {
+            const btn = document.getElementById('btn-surprise');
+            
+            if (surpriseMode === 'off') {
+                surpriseMode = 'mix';
+                btn.innerText = "🎲 Surprise: MIX";
+                btn.classList.add('active');
+            } else if (surpriseMode === 'mix') {
+                surpriseMode = 'major';
+                btn.innerText = "🎲 Surprise: MAJOR ONLY";
+            } else if (surpriseMode === 'major') {
+                surpriseMode = 'minor';
+                btn.innerText = "🎲 Surprise: MINOR ONLY";
+            } else {
+                turnOffSurpriseMode();
+                return; // Return early so we don't trigger a randomizer
+            }
+            
+            randomizePractice();
+        }
+
+        function turnOffSurpriseMode() {
+            surpriseMode = 'off';
+            const btn = document.getElementById('btn-surprise');
+            btn.innerText = "🎲 Surprise: OFF";
+            btn.classList.remove('active');
+        }
+
+        function randomizePractice() {
+            document.getElementById('root-note').value = Math.floor(Math.random() * 12);
+            
+            if (surpriseMode === 'mix') {
+                document.getElementById('scale-type').value = Math.random() > 0.5 ? 'major' : 'minor';
+            } else if (surpriseMode === 'major') {
+                document.getElementById('scale-type').value = 'major';
+            } else if (surpriseMode === 'minor') {
+                document.getElementById('scale-type').value = 'minor';
+            }
+            
+            generateSequence();
+        }
+
+        // --- SEQUENCE GENERATOR (FIXED 16 KEYS) ---
+        function generateSequence() {
+            isFinished = false;
+            const rootNoteIndex = parseInt(document.getElementById('root-note').value);
+            const scaleType = document.getElementById('scale-type').value;
+            const octaveBase = parseInt(document.getElementById('octave-start').value);
+            
+            const startMidiNote = octaveBase + rootNoteIndex; 
+            currentScaleSequence = [];
+            const intervals = scaleIntervals[scaleType];
+            
+            // Phase 1: Ascend
+            for (let i = 0; i < intervals.length; i++) currentScaleSequence.push(startMidiNote + intervals[i]);
+            // Phase 2: Top Note Twice
+            currentScaleSequence.push(startMidiNote + 12);
+            currentScaleSequence.push(startMidiNote + 12);
+            // Phase 3: Descend
+            for (let i = intervals.length - 1; i >= 0; i--) currentScaleSequence.push(startMidiNote + intervals[i]);
+
+            const fingerText = fingeringDb[scaleType][rootNoteIndex];
+            const rhBase = fingerText.rh.split(', ').map(Number);
+            const lhBase = fingerText.lh.split(', ').map(Number);
+            currentVisualFingeringRH = [...rhBase, ...[...rhBase].reverse()];
+            currentVisualFingeringLH = [...lhBase, ...[...lhBase].reverse()];
+
+            // Reset Game State
+            currentStep = 0; totalPresses = 0; correctPresses = 0;
+            clearInterval(timerInterval);
+            document.getElementById('timer-display').innerText = "Time: 0.0s";
+            document.getElementById('accuracy-display').innerText = "Acc: 100%";
+            document.getElementById('status').innerText = "🟢 Connected. Ready to play.";
+            document.getElementById('status').className = "connected";
+            
+            // UI Text Update
+            const useFlats = flatKeys.includes(rootNoteIndex);
+            const namesArray = useFlats ? flatNames : sharpNames;
+            document.getElementById('scale-name').innerText = `${namesArray[rootNoteIndex]} ${scaleType.charAt(0).toUpperCase() + scaleType.slice(1)}`;
+            
+            const displayNotes = intervals.map(i => namesArray[(rootNoteIndex + i) % 12]);
+            displayNotes.push(namesArray[rootNoteIndex]);
+            document.getElementById('scale-notes').innerText = `Notes: ${displayNotes.join(', ')}`;
+
+            document.getElementById('scale-fingering-lh').innerText = `Fingering (LH): ${fingerText.lh}`;
+            document.getElementById('scale-fingering-rh').innerText = `Fingering (RH): ${fingerText.rh}`;
+
+            updatePracticeHighlights();
+            resetInactivityTimer();
+        }
+
+        // --- HIGHLIGHT UPDATER ---
+        function updatePracticeHighlights() {
+            document.querySelectorAll('.key').forEach(k => k.classList.remove('current-target', 'next-target', 'error'));
+            document.querySelectorAll('.finger').forEach(f => f.classList.remove('active'));
+
+            if (currentStep < currentScaleSequence.length) {
+                const currentExpectedKey = document.getElementById(`key-${currentScaleSequence[currentStep]}`);
+                if (currentExpectedKey) currentExpectedKey.classList.add('current-target');
+
+                const rhTarget = currentVisualFingeringRH[currentStep];
+                const lhTarget = currentVisualFingeringLH[currentStep];
+                if(rhTarget) document.getElementById(`rh-${rhTarget}`).classList.add('active');
+                if(lhTarget) document.getElementById(`lh-${lhTarget}`).classList.add('active');
+            }
+
+            if (currentStep + 1 < currentScaleSequence.length) {
+                const nextExpectedKey = document.getElementById(`key-${currentScaleSequence[currentStep + 1]}`);
+                if (nextExpectedKey) nextExpectedKey.classList.add('next-target');
+            }
+        }
+
+        // --- SEQUENCE COMPLETION ---
+        function completeSequence() {
+            isFinished = true;
+            clearInterval(timerInterval);
+            clearTimeout(inactivityTimeout); 
+            
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerText = "🎉 Scale Complete!";
+            statusDiv.classList.add('success-flash');
+            
+            setTimeout(() => {
+                statusDiv.classList.remove('success-flash');
+                if (surpriseMode !== 'off') randomizePractice();
+                else generateSequence(); 
+            }, 200); 
+        }
+
+        // --- PLAY ALONG (AUDIO SYNTH) ---
+        function playDemonstration() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            let time = audioCtx.currentTime;
+            const noteDuration = 0.4;
+
+            currentScaleSequence.forEach((midiNote) => {
+                const osc = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                osc.type = 'triangle';
+                osc.frequency.value = 440 * Math.pow(2, (midiNote - 69) / 12);
+                
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                gainNode.gain.setValueAtTime(0, time);
+                gainNode.gain.linearRampToValueAtTime(0.3, time + 0.05);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + noteDuration - 0.05);
+
+                osc.start(time);
+                osc.stop(time + noteDuration);
+                time += noteDuration;
+            });
+        }
+
+        // --- MIDI LOGIC ---
+        if (navigator.requestMIDIAccess) navigator.requestMIDIAccess().then(onMIDISuccess, () => console.log('MIDI Failed'));
+
+        function onMIDISuccess(midiAccess) {
+            const inputs = midiAccess.inputs.values();
+            for (let input = inputs.next(); input && !input.done; input = inputs.next()) {
+                input.value.onmidimessage = handleMIDIMessage;
+                document.getElementById('status').innerText = `🟢 Connected to: ${input.value.name}`;
+                document.getElementById('status').classList.add('connected');
+            }
+        }
+
+        function handleMIDIMessage(message) {
+            const command = message.data[0];
+            const note = message.data[1];
+            const velocity = message.data.length > 2 ? message.data[2] : 0;
+            const keyElement = document.getElementById(`key-${note}`);
+            if (!keyElement) return;
+
+            if (command === 128 || (command === 144 && velocity === 0)) {
+                keyElement.classList.remove('active');
+                return;
+            }
+
+            if (command === 144 && velocity > 0) {
+                keyElement.classList.add('active'); 
+                
+                if (isFinished) return; 
+
+                resetInactivityTimer();
+                totalPresses++;
+
+                if (note === currentScaleSequence[currentStep]) {
+                    correctPresses++;
+                    if (currentStep === 0) {
+                        startTime = Date.now();
+                        timerInterval = setInterval(() => document.getElementById('timer-display').innerText = `Time: ${((Date.now() - startTime) / 1000).toFixed(1)}s`, 100);
+                    }
+                    
+                    currentStep++; 
+                    updatePracticeHighlights();
+                    
+                    if (currentStep >= currentScaleSequence.length) {
+                        completeSequence();
+                    }
+                } else {
+                    keyElement.classList.add('error');
+                    setTimeout(() => keyElement.classList.remove('error'), 300);
+                }
+                document.getElementById('accuracy-display').innerText = `Acc: ${Math.round((correctPresses / totalPresses) * 100)}%`;
+            }
+        }
+
+        // Event Listeners for manual dropdown changes
+        document.getElementById('root-note').addEventListener('change', () => { 
+            if(surpriseMode !== 'off') turnOffSurpriseMode(); 
+            generateSequence(); 
+        });
+        document.getElementById('scale-type').addEventListener('change', () => { 
+            if(surpriseMode !== 'off') turnOffSurpriseMode(); 
+            generateSequence(); 
+        });
+        document.getElementById('octave-start').addEventListener('change', generateSequence);
+        
+        generateSequence(); // Init
+    </script>
+</body>
+</html>
